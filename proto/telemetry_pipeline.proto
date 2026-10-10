@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package telemetry;
+message AccelPacket {
+    int64 time = 1;
+    float x = 2;
+    float y = 3;
+    float z = 4;
+}
+
+message AccelModule {
+    int64 time = 1;
+    float module = 2;
+}
+
+service AccelService {
+    rpc StreamAccelData(stream AccelPacket) returns (stream AccelModule) {}
+}
+
+service AccelCalcService {
+    rpc StreamAccelData(stream AccelPacket) returns (stream AccelModule) {}
+}
