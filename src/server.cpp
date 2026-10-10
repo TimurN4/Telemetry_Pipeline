@@ -8,9 +8,6 @@
 
 class Session_NodeA;
 
-// =====================================================================
-// ПРАВАЯ РУКА: Реактор для работы с Узлом Б (Клиентская часть)
-// =====================================================================
 class Session_NodeB : public grpc::ClientBidiReactor<telemetry::AccelPacket, telemetry::AccelModule>,
                       public std::enable_shared_from_this<Session_NodeB> {
 public:
@@ -18,7 +15,6 @@ public:
         : stub_(stub), node_a_weak_(node_a) {}
 
     void Start() {
-        // Удерживаем сами себя в памяти, пока gRPC не вызовет OnDone
         self_ref_ = shared_from_this(); 
         
         stub_->async()->StreamAccelData(&context_, this);
@@ -51,8 +47,6 @@ public:
     }
 
     void OnDone(const grpc::Status& status) override {
-        // gRPC закончил работу с этим реактором. Отпускаем ссылку на себя.
-        // Если Узел А тоже нас отпустил, объект безопасно уничтожится.
         self_ref_.reset(); 
     }
 
@@ -60,28 +54,24 @@ private:
     telemetry::AccelCalcService::Stub* stub_;
     grpc::ClientContext context_;
     
-    std::shared_ptr<Session_NodeB> self_ref_; // Самоудержание
-    std::weak_ptr<Session_NodeA> node_a_weak_; // Слабая ссылка на левую руку
+    std::shared_ptr<Session_NodeB> self_ref_;
+    std::weak_ptr<Session_NodeA> node_a_weak_; 
     
     telemetry::AccelModule incoming_from_B_; 
     bool write_in_flight_to_B_ = false;
     std::queue<telemetry::AccelPacket> queue_to_B_; 
 };
 
-// =====================================================================
-// ЛЕВАЯ РУКА: Реактор для работы с Узлом А (Серверная часть)
-// =====================================================================
 class Session_NodeA : public grpc::ServerBidiReactor<telemetry::AccelPacket, telemetry::AccelModule>,
                       public std::enable_shared_from_this<Session_NodeA> {
 public:
     Session_NodeA() {}
 
     void Start(telemetry::AccelCalcService::Stub* stub_for_B) {
-        self_ref_ = shared_from_this(); // Удерживаем себя для gRPC
+        self_ref_ = shared_from_this(); 
 
-        // Создаем правую руку и передаем ей shared_ptr на нас
         auto node_b = std::make_shared<Session_NodeB>(stub_for_B, shared_from_this());
-        node_b_weak_ = node_b; // Запоминаем слабую ссылку, чтобы не было утечек
+        node_b_weak_ = node_b;
         
         node_b->Start();
         StartRead(&incoming_from_A_);
@@ -115,18 +105,15 @@ public:
     }
 
     void OnCancel() override {
-        // Узел А отвалился. Гасим Узел Б.
         if (auto node_b = node_b_weak_.lock()) {
             node_b->CancelRPC(); 
         }
     }
 
     void OnDone() override {
-        // На случай, если OnCancel не вызвался, дублируем отмену
         if (auto node_b = node_b_weak_.lock()) {
             node_b->CancelRPC(); 
         }
-        // Отпускаем ссылку. Объект удалится автоматически.
         self_ref_.reset(); 
     }
 
@@ -142,32 +129,23 @@ private:
 void Session_NodeB::OnReadDone(bool ok) {
     if(!ok) return; 
     
-    // Проверяем, жив ли еще Узел А, прежде чем отправлять ему данные
     if (auto node_a = node_a_weak_.lock()) {
         node_a->SendToNodeA(incoming_from_B_);
     }
     StartRead(&incoming_from_B_);
 }
 
-// =====================================================================
-// САМ СЕРВИС
-// =====================================================================
 class AccelServiceImpl final : public telemetry::AccelService::CallbackService {
 public:
     AccelServiceImpl() 
-        // ВНИМАНИЕ: Порт клиента изменен на 57782, чтобы прокси не стучался сам в себя!
         : channel_(grpc::CreateChannel("localhost:57781", grpc::InsecureChannelCredentials())),
           stub_for_B_(telemetry::AccelCalcService::NewStub(channel_)) {}
 
     grpc::ServerBidiReactor<telemetry::AccelPacket, telemetry::AccelModule>* StreamAccelData(
         grpc::CallbackServerContext* context) override {
         
-        // Создаем через make_shared, чтобы работал shared_from_this()
         auto session = std::make_shared<Session_NodeA>();
         session->Start(stub_for_B_.get());
-        
-        // Возвращаем сырой указатель (gRPC это требует), 
-        // но память защищена внутренним self_ref_
         return session.get(); 
     }
 
@@ -177,7 +155,7 @@ private:
 };
 
 void RunServer() {
-    std::string server_adress = "0.0.0.0:57780"; // Слушаем все интерфейсы
+    std::string server_adress = "0.0.0.0:57780"; 
     AccelServiceImpl service;
 
     grpc::ServerBuilder builder;

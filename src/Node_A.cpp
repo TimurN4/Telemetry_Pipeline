@@ -26,7 +26,6 @@ public:
         class Chatter final : public grpc::ClientBidiReactor<telemetry::AccelPacket, telemetry::AccelModule> {
             public:
                 Chatter(Client_NodeA* client) : client_(client) {
-                    // std::cout << "gaz" << std::endl;
                     client_->stub_->async()->StreamAccelData(&context_, this);
                     AddHold();
                     NextWrite();
@@ -51,11 +50,7 @@ public:
                 }
 
                 void OnDone(const grpc::Status& s) override {
-                    // std::unique_lock<std::mutex> l(client_->mtx_);
-                    // if(client_->count_of_running_rpcs_ == 0) {
-                    //     client_->cv.notify_one();
-                    // }
-                    --client_->count_of_running_rpcs_; // можно просто оповестить всех 
+                    --client_->count_of_running_rpcs_; 
                     client_->cv.notify_one();
                     delete this;
                 }

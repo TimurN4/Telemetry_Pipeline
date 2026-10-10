@@ -2,8 +2,6 @@
 #include "telemetry_pipeline.grpc.pb.h"
 
 #include <grpcpp/server_builder.h>
-// protoc для message не генерирует операцию ==
-// этот хедер содержит google::protobuf::util::MessageDifferencer::Equals(message1, message2) который возвращает равенство(нужно посмотреть как точно он работает)
 #include <google/protobuf/util/message_differencer.h> 
 
 #include <iostream>
@@ -20,7 +18,6 @@ public:
 
     grpc::ServerBidiReactor<telemetry::AccelPacket, telemetry::AccelModule>* StreamAccelData(
     grpc::CallbackServerContext* context) {
-    // для каждого нового запроса создается свой Chatter
     class Chatter : public grpc::ServerBidiReactor<telemetry::AccelPacket, telemetry::AccelModule> {
     public:
         Chatter() {
@@ -68,7 +65,6 @@ public:
     };
     return new Chatter();
 }
-// common data for all threads for this service
 private:
 
 };
@@ -86,7 +82,6 @@ void RunServer() {
 }
 
 int main() {
-    //instance of service
     RunServer();
     return 0;
 }
